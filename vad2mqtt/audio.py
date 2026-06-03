@@ -16,6 +16,18 @@ from .vad_engine import VADEngine
 LOG = logging.getLogger(__name__)
 
 
+def _list_input_devices() -> list[str]:
+    """Return human-readable input device names."""
+    lines = []
+    try:
+        for i, dev in enumerate(sd.query_devices()):
+            if dev["max_input_channels"] > 0:
+                lines.append(f"  [{i}] {dev['name']}")
+    except Exception as exc:
+        lines.append(f"  (could not enumerate: {exc})")
+    return lines
+
+
 class AudioMonitor:
     """Continuously captures audio, runs VAD, and emits callbacks."""
 
@@ -39,7 +51,7 @@ class AudioMonitor:
     def start(self) -> None:
         LOG.info(
             "Starting audio monitor — device=%s rate=%s chunk=%s",
-            Config.SOUND_DEVICE or "default",
+            Config.SOUND_DEVICE or Config.ALSA_CARD or "default",
             self.vad.sample_rate,
             Config.chunk_samples(),
         )
@@ -52,6 +64,23 @@ class AudioMonitor:
         self._running = False
         if self._thread:
             self._thread.join(timeout=2.0)
+
+    def _open_stream(self, kwargs: dict):
+        """Try to open the stream; fall back to default on bad device."""
+        try:
+            return sd.InputStream(**kwargs)
+        except Exception as exc:
+            device = kwargs.get("device")
+            if device is not None:
+                LOG.warning(
+                    "Failed to open device '%s': %s. Falling back to default.",
+                    device,
+                    exc,
+                )
+                LOG.info("Available input devices:\n%s", "\n".join(_list_input_devices()))
+                kwargs.pop("device", None)
+                return sd.InputStream(**kwargs)
+            raise
 
     def _loop(self) -> None:
         def callback(indata, frames, time_info, status):
@@ -69,20 +98,26 @@ class AudioMonitor:
             if self._noise_throttler.should_publish(db):
                 self.on_noise(db)
 
+        # Resolve device: SOUND_DEVICE takes precedence, then ALSA_CARD
+        device = Config.SOUND_DEVICE or Config.ALSA_CARD or None
+
+        # Chunk size must match the actual audio stream rate (the VAD plugin's
+        # sample_rate), not Config.SAMPLE_RATE which may differ (e.g. shazam2mqtt
+        # sets 44100 while Silero VAD needs 16000).
+        blocksize = int(self.vad.sample_rate * Config.CHUNK_DURATION_MS / 1000)
+
         kwargs = {
             "samplerate": self.vad.sample_rate,
             "channels": 1,
             "dtype": "float32",
-            "blocksize": Config.chunk_samples(),
+            "blocksize": blocksize,
             "callback": callback,
         }
-        if Config.SOUND_DEVICE:
-            kwargs["device"] = Config.SOUND_DEVICE
-        if Config.ALSA_CARD:
-            sd.default.device = Config.ALSA_CARD
+        if device:
+            kwargs["device"] = device
 
         try:
-            with sd.InputStream(**kwargs):
+            with self._open_stream(kwargs):
                 while self._running:
                     time.sleep(0.1)
         except Exception as exc:
