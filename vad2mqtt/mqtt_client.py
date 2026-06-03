@@ -43,13 +43,20 @@ class MQTTClient:
 
     def connect(self) -> None:
         LOG.info("Connecting to MQTT broker %s:%s", Config.MQTT_HOST, Config.MQTT_PORT)
-        self.client.connect(Config.MQTT_HOST, Config.MQTT_PORT, keepalive=60)
-        self.client.loop_start()
-        # Wait briefly for connection
-        for _ in range(20):
-            if self._connected:
-                break
-            time.sleep(0.1)
+        for attempt in range(1, 6):
+            try:
+                self.client.connect(Config.MQTT_HOST, Config.MQTT_PORT, keepalive=60)
+                self.client.loop_start()
+                # Wait briefly for connection
+                for _ in range(20):
+                    if self._connected:
+                        return
+                    time.sleep(0.1)
+                LOG.warning("MQTT connection timeout, retrying...")
+            except Exception as exc:
+                LOG.warning("MQTT connection attempt %s failed: %s", attempt, exc)
+                time.sleep(min(2 ** attempt, 30))
+        LOG.error("MQTT failed to connect after 5 attempts, continuing anyway")
 
     def disconnect(self) -> None:
         self.client.loop_stop()

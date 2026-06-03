@@ -59,7 +59,10 @@ class AudioMonitor:
                 LOG.warning("Audio status: %s", status)
             if not self._running:
                 raise sd.CallbackStop
-            frame = indata[:, 0].copy()
+            if indata.ndim == 1:
+                frame = indata.copy()
+            else:
+                frame = indata[:, 0].copy()
             prob = self.vad.get_probability(frame)
             self.on_vad(prob)
             db = rms_dbfs(frame)
@@ -79,7 +82,7 @@ class AudioMonitor:
             sd.default.device = Config.ALSA_CARD
 
         try:
-            with sd.RawInputStream(**kwargs):
+            with sd.InputStream(**kwargs):
                 while self._running:
                     time.sleep(0.1)
         except Exception as exc:
