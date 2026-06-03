@@ -1,10 +1,17 @@
 # vad2mqtt
 
-Voice Activity Detection to MQTT bridge using **ovos-plugin-manager**.
+> **Bring the entire OpenVoiceOS VAD ecosystem into Home Assistant as IoT sensors.**
 
-Listens to your microphone in real-time, runs any OPM VAD plugin (default:
-Silero VAD), and publishes speech probability, model name, and noise level to
-MQTT — with full Home Assistant auto-discovery.
+`vad2mqtt` is a real-time Voice Activity Detection bridge built on
+**ovos-plugin-manager**. It listens to any microphone, loads any OPM VAD
+plugin, and publishes speech probability, noise level, and a speech-detected
+binary sensor to MQTT — with full Home Assistant auto-discovery.
+
+Because OPM plugins are interchangeable, **every current and future OVOS VAD
+plugin instantly becomes a Home Assistant sensor** with zero code changes.
+Install `ovos-vad-plugin-silero` today, swap to `ovos-vad-plugin-webrtcvad`
+tomorrow, or drop in a community plugin next week — `vad2mqtt` adapts
+automatically.
 
 > **A complementary occupancy signal from the microphone you already own.**
 
@@ -41,10 +48,17 @@ with zero extra hardware:
 ## Quick start (Docker)
 
 ```bash
+# PipeWire / PulseAudio host (most modern desktops)
+vim docker-compose.yml   # set MQTT_HOST
 docker compose up -d
 ```
 
-Edit `docker-compose.yml` to point `MQTT_HOST` at your broker.
+```bash
+# Pure ALSA host (e.g. Raspberry Pi)
+# Uncomment the `devices:` line in docker-compose.yml and set ALSA_CARD
+vim docker-compose.yml
+docker compose up -d
+```
 
 ## Quick start (pip)
 
@@ -75,7 +89,7 @@ All settings are environment variables:
 | `MQTT_TOPIC_PREFIX` | `vad2mqtt` | Topic root |
 | `SAMPLE_RATE` | `16000` | Audio sample rate |
 | `SOUND_DEVICE` | — | `sounddevice` device index/name |
-| `ALSA_CARD` | — | ALSA card string |
+| `ALSA_CARD` | — | ALSA card string (for PipeWire/ALSA) |
 | `VAD_PLUGIN_MODULE` | `ovos-vad-plugin-silero` | OPM plugin module name |
 | `VAD_PLUGIN_CONFIG` | — | JSON extra config for plugin |
 | `VAD_THRESHOLD` | `0.5` | Speech / silence cutoff |
@@ -87,19 +101,31 @@ All settings are environment variables:
 | `NOISE_LEVEL_DELTA` | `3.0` | dB jump that bypasses interval |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
-## Switching VAD plugins
+## Switching VAD plugins — the OPM advantage
 
-Install any OPM-compatible VAD plugin and change the env var:
+Because `vad2mqtt` uses `ovos-plugin-manager`, you can swap VAD engines with
+a single environment variable. Every current and future OVOS VAD plugin is
+supported:
 
 ```bash
-# WebRTC VAD (lighter, no ML)
+# Silero VAD — best accuracy, ONNX, ~1 ms/frame on Pi (default)
+pip install ovos-vad-plugin-silero
+VAD_PLUGIN_MODULE=ovos-vad-plugin-silero
+
+# WebRTC VAD — lighter, no ML model
 pip install ovos-vad-plugin-webrtcvad
 VAD_PLUGIN_MODULE=ovos-vad-plugin-webrtcvad
 
-# Noise-based VAD
+# Noise-based VAD — threshold-based, minimal CPU
 pip install ovos-vad-plugin-noise
 VAD_PLUGIN_MODULE=ovos-vad-plugin-noise
+
+# Future community plugins — just install and point VAD_PLUGIN_MODULE at them
 ```
+
+This is the power of the OVOS plugin ecosystem: new VAD research (new ONNX
+models, new algorithms) ships as a plain pip package. `vad2mqtt` consumes it
+immediately with zero code changes.
 
 ## Architecture
 

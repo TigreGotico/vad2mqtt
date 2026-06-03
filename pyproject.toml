@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 authors = [
     {name = "TigreGotico", email = "opensource@tigregotico.com"}
 ]
-keywords = ["vad", "mqtt", "home-assistant", "ovos", "silero", "voice-activity-detection"]
+keywords = ["vad", "mqtt", "home-assistant", "ovos", "openvoiceos", "silero", "voice-activity-detection", "occupancy-detection", "iot"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
