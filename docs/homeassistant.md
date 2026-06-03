@@ -24,32 +24,21 @@ etc., it dramatically reduces false negatives.
 
 The [Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection)
 integration fuses multiple sensors into a single probabilistic occupancy score.
-`vad2mqtt` provides two useful inputs:
+It is configured entirely through the Home Assistant UI (no YAML).
 
-```yaml
-# configuration.yaml
-binary_sensor:
-  - platform: area_occupancy
-    name: "Office Occupancy"
-    inputs:
-      - entity_id: binary_sensor.vad2mqtt_speech_detected
-        weight: 1.0
-        probability_on: 0.95
-        probability_off: 0.10
-      - entity_id: sensor.vad2mqtt_noise_level
-        weight: 0.5
-        probability_threshold: -40.0
-        probability_above: 0.70
-        probability_below: 0.15
-      - entity_id: binary_sensor.office_pir
-        weight: 1.0
-        probability_on: 0.90
-        probability_off: 0.05
-```
+Add `vad2mqtt` inputs via the integration's config flow:
 
-In this example the VAD binary sensor is a *strong* indicator of occupancy,
-while the noise level adds a *weaker* continuous signal that still contributes
-even when no one is actively speaking (e.g. typing, chair squeaking).
+1. **Binary sensor** — `binary_sensor.vad2mqtt_speech_detected`
+   - Treat this as a *strong* indicator: high weight, high `probability_on`
+     (someone is almost certainly present when speaking), low `probability_off`
+     (silence does not mean absence).
+2. **Noise level sensor** — `sensor.vad2mqtt_noise_level`
+   - Treat this as a *weaker* continuous signal: lower weight, threshold around
+     `-40` dB. Contributes even when no one is actively speaking (typing, chair
+     squeaking, coffee grinder).
+
+Pair these with your existing PIR, mmWave, door, or power-monitoring sensors.
+The integration Bayesian-fuses everything into one `occupancy` probability.
 
 ## Entities
 
