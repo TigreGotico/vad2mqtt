@@ -27,6 +27,9 @@ class MQTTClient:
         self._prefix = Config.MQTT_TOPIC_PREFIX
         self._device_name = Config.DEVICE_NAME
         self._device_id = Config.DEVICE_ID
+        self._last_vad_publish = 0.0
+        self._last_vad_prob = 0.0
+        self._last_speech_state = False
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -43,32 +46,54 @@ class MQTTClient:
 
     def connect(self) -> None:
         LOG.info("Connecting to MQTT broker %s:%s", Config.MQTT_HOST, Config.MQTT_PORT)
-        for attempt in range(1, 6):
+        for attempt in range(1, Config.MQTT_RETRY_COUNT + 1):
             try:
-                self.client.connect(Config.MQTT_HOST, Config.MQTT_PORT, keepalive=60)
+                self.client.connect(Config.MQTT_HOST, Config.MQTT_PORT, keepalive=Config.MQTT_KEEPALIVE)
                 self.client.loop_start()
                 # Wait briefly for connection
-                for _ in range(20):
+                deadline = time.time() + Config.MQTT_CONNECT_TIMEOUT
+                while time.time() < deadline:
                     if self._connected:
                         return
                     time.sleep(0.1)
                 LOG.warning("MQTT connection timeout, retrying...")
             except Exception as exc:
-                LOG.warning("MQTT connection attempt %s failed: %s", attempt, exc)
-                time.sleep(min(2 ** attempt, 30))
-        LOG.error("MQTT failed to connect after 5 attempts, continuing anyway")
+                LOG.warning("MQTT connection attempt %s/%s failed: %s", attempt, Config.MQTT_RETRY_COUNT, exc)
+                time.sleep(min(2 ** attempt, Config.MQTT_RETRY_MAX_BACKOFF))
+        LOG.error("MQTT failed to connect after %s attempts, continuing anyway", Config.MQTT_RETRY_COUNT)
 
     def disconnect(self) -> None:
         self.client.loop_stop()
         self.client.disconnect()
 
     def publish_vad(self, probability: float) -> None:
-        self._publish(f"{self._prefix}/vad_probability", json.dumps({"probability": probability}))
+        now = time.time()
+        speech = probability >= Config.VAD_THRESHOLD
+
+        # Publish immediately on speech state transitions so the binary sensor
+        # is responsive; otherwise throttle to PUBLISH_INTERVAL.
+        state_changed = speech != self._last_speech_state
+        interval_elapsed = now - self._last_vad_publish >= Config.PUBLISH_INTERVAL
+
+        if not state_changed and not interval_elapsed:
+            self._last_vad_prob = probability
+            return
+
+        # Use the most recent probability
+        prob = probability if interval_elapsed else self._last_vad_prob
+        self._last_vad_publish = now
+        self._last_vad_prob = probability
+        self._last_speech_state = speech
+
+        self._publish(
+            f"{self._prefix}/vad_probability",
+            json.dumps({"probability": prob}),
+        )
         self._publish(
             f"{self._prefix}/state",
             json.dumps({
-                "probability": round(probability, 4),
-                "speech": probability >= Config.VAD_THRESHOLD,
+                "probability": round(prob, 4),
+                "speech": speech,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }),
         )

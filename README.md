@@ -78,28 +78,44 @@ vad2mqtt
 
 ## Configuration
 
-All settings are environment variables:
+Every runtime knob is an environment variable. Sane defaults mean it works out
+of the box; tune only what you need.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| **MQTT** | | |
 | `MQTT_HOST` | `localhost` | Broker host |
 | `MQTT_PORT` | `1883` | Broker port |
 | `MQTT_USER` | — | Auth user |
 | `MQTT_PASSWORD` | — | Auth password |
 | `MQTT_TOPIC_PREFIX` | `vad2mqtt` | Topic root |
+| `MQTT_CLIENT_ID` | `vad2mqtt-client` | MQTT client identifier |
+| `MQTT_QOS` | `0` | MQTT QoS (0, 1, or 2) |
+| `MQTT_RETAIN` | `true` | Retain flag for state messages |
+| `MQTT_KEEPALIVE` | `60` | MQTT keepalive interval (seconds) |
+| `MQTT_RETRY_COUNT` | `5` | Connection retry attempts on startup |
+| `MQTT_RETRY_MAX_BACKOFF` | `30` | Max seconds between retries |
+| `MQTT_CONNECT_TIMEOUT` | `2.0` | Seconds to wait per connection attempt |
+| **Audio** | | |
 | `SAMPLE_RATE` | `16000` | Audio sample rate |
-| `SOUND_DEVICE` | — | `sounddevice` device index/name |
-| `ALSA_CARD` | — | ALSA card string (for PipeWire/ALSA) |
+| `SOUND_DEVICE` | — | `sounddevice` device index or name |
+| `ALSA_CARD` | — | ALSA card name (e.g. `C615`) |
+| `CHUNK_DURATION_MS` | `30` | Frame size in milliseconds |
+| **VAD Plugin** | | |
 | `VAD_PLUGIN_MODULE` | `ovos-vad-plugin-silero` | OPM plugin module name |
-| `VAD_PLUGIN_CONFIG` | — | JSON extra config for plugin |
-| `VAD_THRESHOLD` | `0.5` | Speech / silence cutoff |
+| `VAD_PLUGIN_CONFIG` | — | JSON extra config for the plugin |
+| `VAD_THRESHOLD` | `0.5` | Speech / silence probability cutoff |
+| **Home Assistant** | | |
 | `HA_ENABLED` | `true` | Auto-discovery toggle |
+| `HA_DISCOVERY_PREFIX` | `homeassistant` | HA MQTT discovery prefix |
 | `DEVICE_NAME` | `vad2mqtt` | HA entity prefix |
 | `DEVICE_ID` | `vad2mqtt_01` | HA device identifier |
-| `PUBLISH_INTERVAL` | `0.5` | Min seconds between VAD publishes |
+| **Throttling** | | |
+| `PUBLISH_INTERVAL` | `1.0` | Min seconds between VAD publishes |
 | `NOISE_LEVEL_INTERVAL` | `2.0` | Min seconds between noise publishes |
-| `NOISE_LEVEL_DELTA` | `3.0` | dB jump that bypasses interval |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| `NOISE_LEVEL_DELTA` | `3.0` | dB jump that bypasses the noise interval |
+| **Logging** | | |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 ## Switching VAD plugins — the OPM advantage
 
