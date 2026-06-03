@@ -3,10 +3,10 @@
 `vad2mqtt` publishes four entities via MQTT auto-discovery. No manual YAML
 configuration is required.
 
-## Occupancy detection — the killer use-case
+## Occupancy detection — a complementary signal
 
 If a device already has a microphone (smart speaker, SBC with a cheap USB mic,
-intercom panel, etc.), VAD is the cheapest possible occupancy signal:
+intercom panel, etc.), VAD is a cheap *complementary* occupancy signal:
 
 - **No extra hardware** — the mic is already there.
 - **Privacy-first** — no audio leaves the device; only a 0–1 probability float
@@ -16,9 +16,40 @@ intercom panel, etc.), VAD is the cheapest possible occupancy signal:
   wake-word engine.
 
 When someone speaks, `Speech Detected` flips to **ON**. When the room is silent
-for a configurable duration, it flips to **OFF**. That is a native Home Assistant
-`binary_sensor` with `device_class: sound`, which means it can drive automations
-just like a PIR or mmWave sensor.
+for a configurable duration, it flips to **OFF**. Used *alone*, this misses
+people who are sitting quietly. Used *alongside* PIR, mmWave, door sensors,
+etc., it dramatically reduces false negatives.
+
+### Integration with Area Occupancy Detection
+
+The [Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection)
+integration fuses multiple sensors into a single probabilistic occupancy score.
+`vad2mqtt` provides two useful inputs:
+
+```yaml
+# configuration.yaml
+binary_sensor:
+  - platform: area_occupancy
+    name: "Office Occupancy"
+    inputs:
+      - entity_id: binary_sensor.vad2mqtt_speech_detected
+        weight: 1.0
+        probability_on: 0.95
+        probability_off: 0.10
+      - entity_id: sensor.vad2mqtt_noise_level
+        weight: 0.5
+        probability_threshold: -40.0
+        probability_above: 0.70
+        probability_below: 0.15
+      - entity_id: binary_sensor.office_pir
+        weight: 1.0
+        probability_on: 0.90
+        probability_off: 0.05
+```
+
+In this example the VAD binary sensor is a *strong* indicator of occupancy,
+while the noise level adds a *weaker* continuous signal that still contributes
+even when no one is actively speaking (e.g. typing, chair squeaking).
 
 ## Entities
 

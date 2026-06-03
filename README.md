@@ -6,24 +6,28 @@ Listens to your microphone in real-time, runs any OPM VAD plugin (default:
 Silero VAD), and publishes speech probability, model name, and noise level to
 MQTT — with full Home Assistant auto-discovery.
 
-> **The cheapest occupancy sensor is the microphone you already own.**
+> **A complementary occupancy signal from the microphone you already own.**
 
-## Why this exists — occupancy detection
+## Why this exists — complementary occupancy detection
 
-Most rooms already have a microphone: smart speakers, intercom panels, SBCs with
-a cheap USB mic, or old phones running Home Assistant Companion. Adding a
-**Voice Activity Detector** turns that mic into a privacy-respecting occupancy
-sensor with zero extra hardware:
+Most rooms already have a microphone (smart speakers, SBCs with a cheap USB
+mic, intercom panels, old phones running Home Assistant Companion). A **Voice
+Activity Detector** adds a privacy-respecting *complementary* occupancy signal
+with zero extra hardware:
 
-- **People speaking → room occupied.** The `Speech Detected` binary sensor flips
-  to `ON` when someone talks and `OFF` after a configurable silence period.
+- **Complementary, not standalone.** VAD is one input among many (PIR, mmWave,
+  door sensors, etc.). It feeds into a probabilistic occupancy estimator such
+  as [Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection).
+  Both the binary `Speech Detected` sensor and the continuous `Noise Level`
+  sensor are useful inputs.
 - **No audio ever leaves the device.** Only a 0–1 float (speech probability) and
   a dB value cross the wire. No transcription, no wake-word, no cloud.
 - **Lightweight.** Silero VAD runs in ~1 ms per 30 ms frame on a Raspberry Pi.
   CPU usage is negligible.
-- **Works where PIR fails.** PIR sensors need motion + heat. VAD detects
-  presence even when someone is sitting still at a desk. It also covers the
-  blind spot where someone is behind a PIR sensor.
+- **Fills gaps PIR leaves behind.** PIR sensors need motion + heat. VAD catches
+  presence when someone is sitting still at a desk or behind a PIR blind spot.
+  It also *misses* people who are silent, which is why it must be fused with
+  other sensors rather than used alone.
 
 ## What it does
 
