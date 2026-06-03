@@ -105,6 +105,8 @@ of the box; tune only what you need.
 | `VAD_PLUGIN_MODULE` | `ovos-vad-plugin-silero` | OPM plugin module name |
 | `VAD_PLUGIN_CONFIG` | — | JSON extra config for the plugin |
 | `VAD_THRESHOLD` | `0.5` | Speech / silence probability cutoff |
+| `REQUIRED_SPEECH_FRAMES` | `5` | Consecutive speech frames to flip binary ON |
+| `REQUIRED_SILENCE_FRAMES` | `20` | Consecutive silence frames to flip binary OFF |
 | **Home Assistant** | | |
 | `HA_ENABLED` | `true` | Auto-discovery toggle |
 | `HA_DISCOVERY_PREFIX` | `homeassistant` | HA MQTT discovery prefix |
