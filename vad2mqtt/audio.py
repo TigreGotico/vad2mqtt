@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 import threading
 import time
 
@@ -28,6 +29,21 @@ def _list_input_devices() -> list[str]:
     return lines
 
 
+def _resolve_alsa_hw(name: str) -> str | None:
+    """Try to map an ALSA card name (e.g. 'C615') to hw:X,Y via arecord -l."""
+    try:
+        output = subprocess.check_output(["arecord", "-l"], text=True, timeout=5)
+        for line in output.splitlines():
+            if line.startswith("card ") and name in line:
+                # Parse "card 3: C615 [HD Webcam C615], device 0: ..."
+                card_part = line.split(":")[0]  # "card 3"
+                card_num = card_part.replace("card ", "").strip()
+                return f"hw:{card_num},0"
+    except Exception:
+        pass
+    return None
+
+
 class AudioMonitor:
     """Continuously captures audio, runs VAD, and emits callbacks."""
 
@@ -51,7 +67,7 @@ class AudioMonitor:
     def start(self) -> None:
         LOG.info(
             "Starting audio monitor — device=%s rate=%s chunk=%s",
-            Config.SOUND_DEVICE or Config.ALSA_CARD or "default",
+            Config.SOUND_DEVICE or "default (ALSA_CARD=%s)" % (Config.ALSA_CARD or "not set"),
             self.vad.sample_rate,
             Config.chunk_samples(),
         )
@@ -66,21 +82,39 @@ class AudioMonitor:
             self._thread.join(timeout=2.0)
 
     def _open_stream(self, kwargs: dict):
-        """Try to open the stream; fall back to default on bad device."""
-        try:
+        """Open the stream, trying device name then ALSA hw fallback then default."""
+        device = kwargs.pop("device", None)
+        if device is None:
+            # No device specified — let PortAudio / ALSA pick via 'default'
             return sd.InputStream(**kwargs)
-        except Exception as exc:
-            device = kwargs.get("device")
-            if device is not None:
-                LOG.warning(
-                    "Failed to open device '%s': %s. Falling back to default.",
-                    device,
-                    exc,
-                )
-                LOG.info("Available input devices:\n%s", "\n".join(_list_input_devices()))
-                kwargs.pop("device", None)
-                return sd.InputStream(**kwargs)
-            raise
+
+        # Attempt 1: exact PortAudio device identifier (int or enumerated name)
+        try:
+            return sd.InputStream(**kwargs, device=device)
+        except sd.PortAudioError as exc:
+            err_msg = str(exc).lower()
+            if "no input device matching" in err_msg or "invalid device" in err_msg:
+                LOG.debug("PortAudio does not enumerate '%s', trying ALSA hw fallback", device)
+            else:
+                raise
+
+        # Attempt 2: resolve ALSA card name → hw:X,Y and try again
+        hw_id = _resolve_alsa_hw(device)
+        if hw_id:
+            LOG.info("Resolved ALSA card '%s' → '%s', retrying", device, hw_id)
+            try:
+                return sd.InputStream(**kwargs, device=hw_id)
+            except sd.PortAudioError as exc2:
+                LOG.warning("Failed to open ALSA hw '%s': %s", hw_id, exc2)
+
+        # Attempt 3: fallback to system default
+        LOG.warning(
+            "Failed to open device '%s'. Falling back to default.\n"
+            "Available input devices:\n%s",
+            device,
+            "\n".join(_list_input_devices()),
+        )
+        return sd.InputStream(**kwargs)
 
     def _loop(self) -> None:
         def callback(indata, frames, time_info, status):
@@ -98,12 +132,14 @@ class AudioMonitor:
             if self._noise_throttler.should_publish(db):
                 self.on_noise(db)
 
-        # Resolve device: SOUND_DEVICE takes precedence, then ALSA_CARD
-        device = Config.SOUND_DEVICE or Config.ALSA_CARD or None
+        # SOUND_DEVICE is a PortAudio identifier (int or substring).
+        # ALSA_CARD is handled at the ALSA layer (affects the 'default' PCM);
+        # we do NOT pass it to PortAudio, because PortAudio cannot resolve
+        # ALSA card names — it only knows enumerated device names.
+        device = Config.SOUND_DEVICE or None
 
         # Chunk size must match the actual audio stream rate (the VAD plugin's
-        # sample_rate), not Config.SAMPLE_RATE which may differ (e.g. shazam2mqtt
-        # sets 44100 while Silero VAD needs 16000).
+        # sample_rate), not Config.SAMPLE_RATE which may differ.
         blocksize = int(self.vad.sample_rate * Config.CHUNK_DURATION_MS / 1000)
 
         kwargs = {

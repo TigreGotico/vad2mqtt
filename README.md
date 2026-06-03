@@ -98,8 +98,8 @@ of the box; tune only what you need.
 | `MQTT_CONNECT_TIMEOUT` | `2.0` | Seconds to wait per connection attempt |
 | **Audio** | | |
 | `SAMPLE_RATE` | `16000` | Audio sample rate |
-| `SOUND_DEVICE` | — | `sounddevice` device index or name |
-| `ALSA_CARD` | — | ALSA card name (e.g. `C615`) |
+| `SOUND_DEVICE` | — | PortAudio device index or substring (e.g. `3`, `C615`). Leave empty to use the ALSA `default` PCM |
+| `ALSA_CARD` | — | ALSA card name (e.g. `C615`). Sets the system default capture card; does **not** pass the name to PortAudio |
 | `CHUNK_DURATION_MS` | `30` | Frame size in milliseconds |
 | **VAD Plugin** | | |
 | `VAD_PLUGIN_MODULE` | `ovos-vad-plugin-silero` | OPM plugin module name |
