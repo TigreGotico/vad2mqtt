@@ -9,8 +9,8 @@ If a device already has a microphone (smart speaker, SBC with a cheap USB mic,
 intercom panel, etc.), VAD is a cheap *complementary* occupancy signal:
 
 - **No extra hardware** — the mic is already there.
-- **Privacy-first** — no audio leaves the device; only a 0–1 probability float
-  and a dB value are sent over MQTT.
+- **Privacy-first** — no audio leaves the device; only a 0–100 % probability
+  value and a dB value are sent over MQTT.
 - **Lightweight** — Silero VAD runs in ~1 ms per 30 ms frame on a Raspberry Pi.
 - **Cloud-free** — 100 % local. No voice recognition, no transcription, no
   wake-word engine.
@@ -44,7 +44,7 @@ The integration Bayesian-fuses everything into one `occupancy` probability.
 
 | Entity | Type | Purpose |
 |--------|------|---------|
-| VAD Probability | sensor | Raw 0.0–1.0 speech probability |
+| VAD Probability | sensor | Raw 0–100 % speech probability |
 | VAD Model | sensor | Which OPM plugin is running |
 | Noise Level | sensor | Ambient RMS in dB |
 | Speech Detected | binary_sensor | Occupancy proxy — ON when someone speaks |
@@ -82,11 +82,12 @@ type: gauge
 entity: sensor.vad2mqtt_vad_probability
 name: Speech Probability
 min: 0
-max: 1
+max: 100
+unit: "%"
 severity:
-  green: 0.0
-  yellow: 0.3
-  red: 0.7
+  green: 0
+  yellow: 30
+  red: 70
 ```
 
 ## Dashboard card — noise level history

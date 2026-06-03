@@ -102,14 +102,17 @@ class MQTTClient:
         self._last_vad_prob = probability
         self._last_speech_state = speech_confirmed
 
+        # Probability is published as 0-100 % so Home Assistant renders it as a
+        # gauge with a proper unit of measurement.
+        pct = round(prob * 100, 2)
         self._publish(
             f"{self._prefix}/vad_probability",
-            json.dumps({"probability": prob}),
+            json.dumps({"probability": pct}),
         )
         self._publish(
             f"{self._prefix}/state",
             json.dumps({
-                "probability": round(prob, 4),
+                "probability": pct,
                 "speech": speech_confirmed,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }),
@@ -149,7 +152,7 @@ class MQTTClient:
             state_topic=f"{self._prefix}/vad_probability",
             value_template="{{ value_json.probability }}",
             device=device,
-            unit_of_measurement="",
+            unit_of_measurement="%",
             state_class="measurement",
             icon="mdi:account-voice",
         )

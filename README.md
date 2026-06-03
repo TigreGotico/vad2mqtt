@@ -27,8 +27,8 @@ with zero extra hardware:
   as [Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection).
   Both the binary `Speech Detected` sensor and the continuous `Noise Level`
   sensor are useful inputs.
-- **No audio ever leaves the device.** Only a 0–1 float (speech probability) and
-  a dB value cross the wire. No transcription, no wake-word, no cloud.
+- **No audio ever leaves the device.** Only a 0–100 % value (speech probability)
+  and a dB value cross the wire. No transcription, no wake-word, no cloud.
 - **Lightweight.** Silero VAD runs in ~1 ms per 30 ms frame on a Raspberry Pi.
   CPU usage is negligible.
 - **Fills gaps PIR leaves behind.** PIR sensors need motion + heat. VAD catches
@@ -41,7 +41,7 @@ with zero extra hardware:
 1. **Real-time audio** — captures microphone input in small chunks (default 30 ms).
 2. **OPM VAD plugin** — loads any `ovos-plugin-manager` VAD engine. Default is
    `ovos-vad-plugin-silero` (ONNX, lightweight).
-3. **Speech probability** — publishes a 0.0–1.0 float every chunk.
+3. **Speech probability** — publishes a 0–100 % value every second (throttled).
 4. **Noise level** — publishes RMS dB at a throttled interval.
 5. **MQTT + Home Assistant** — 4 auto-discovered entities under one device.
 
@@ -71,7 +71,7 @@ vad2mqtt
 
 | Entity | Type | Payload | Note |
 |--------|------|---------|------|
-| VAD Probability | sensor | `0.87` | 0.0–1.0, `state_class: measurement` |
+| VAD Probability | sensor | `87.0` | 0–100 %, `unit_of_measurement: %`, `state_class: measurement` |
 | VAD Model | sensor | `ovos-vad-plugin-silero` | Static-ish, updates on startup |
 | Noise Level | sensor | `-45.2` | dB, `device_class: sound_pressure` |
 | Speech Detected | binary_sensor | `ON` / `OFF` | Derived from threshold |
@@ -154,8 +154,8 @@ Mic ──► sounddevice ──► 30 ms chunks ──► OPM VAD Plugin
                     ▼
             MQTT ──► Home Assistant
             │
-            ├── vad_probability (continuous)
-            ├── noise_level (throttled)
+            ├── vad_probability (continuous, 0–100 %)
+            ├── noise_level (throttled, dB)
             ├── model_name (startup)
             └── speech_detected (binary, derived)
 ```
