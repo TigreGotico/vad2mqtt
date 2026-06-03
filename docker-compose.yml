@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  vad2mqtt:
+    image: ghcr.io/tigregotico/vad2mqtt:dev
+    container_name: vad2mqtt
+    restart: unless-stopped
+    devices:
+      - /dev/snd:/dev/snd
+    environment:
+      # MQTT
+      - MQTT_HOST=your.mqtt.broker
+      - MQTT_PORT=1883
+      - MQTT_USER=
+      - MQTT_PASSWORD=
+      - MQTT_TOPIC_PREFIX=vad2mqtt
+      # Audio
+      - SAMPLE_RATE=16000
+      - SOUND_DEVICE=
+      - ALSA_CARD=
+      # VAD Plugin
+      - VAD_PLUGIN_MODULE=ovos-vad-plugin-silero
+      - VAD_PLUGIN_CONFIG=
+      - VAD_THRESHOLD=0.5
+      # Home Assistant
+      - HA_ENABLED=true
+      - HA_DISCOVERY_PREFIX=homeassistant
+      - DEVICE_NAME=vad2mqtt
+      - DEVICE_ID=vad2mqtt_01
+      # Throttling
+      - PUBLISH_INTERVAL=0.5
+      - NOISE_LEVEL_INTERVAL=2.0
+      - NOISE_LEVEL_DELTA=3.0
+      # Logging
+      - LOG_LEVEL=INFO
+    # Optional: use host network for MQTT if broker is local
+    # network_mode: host
