@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import queue
 import subprocess
 import threading
 import time
@@ -36,8 +35,7 @@ def _resolve_alsa_hw(name: str) -> str | None:
         output = subprocess.check_output(["arecord", "-l"], text=True, timeout=5)
         for line in output.splitlines():
             if line.startswith("card ") and name in line:
-                # Parse "card 3: C615 [HD Webcam C615], device 0: ..."
-                card_part = line.split(":")[0]  # "card 3"
+                card_part = line.split(":")[0]
                 card_num = card_part.replace("card ", "").strip()
                 return f"hw:{card_num},0"
     except Exception:
@@ -46,7 +44,7 @@ def _resolve_alsa_hw(name: str) -> str | None:
 
 
 class AudioMonitor:
-    """Continuously captures audio, runs VAD, and emits callbacks."""
+    """Captures audio and periodically runs VAD inference at the publish interval."""
 
     def __init__(
         self,
@@ -61,8 +59,9 @@ class AudioMonitor:
         self._running = False
         self._thread: threading.Thread | None = None
         self._worker: threading.Thread | None = None
-        # Bounded queue — drops frames rather than blocking the audio callback.
-        self._queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=20)
+        # Shared latest frame — audio callback writes, worker reads.
+        self._latest_frame: np.ndarray | None = None
+        self._frame_lock = threading.Lock()
         self._noise_throttler = Throttler(
             interval=Config.NOISE_LEVEL_INTERVAL,
             delta=Config.NOISE_LEVEL_DELTA,
@@ -70,10 +69,11 @@ class AudioMonitor:
 
     def start(self) -> None:
         LOG.info(
-            "Starting audio monitor — device=%s rate=%s chunk=%s",
+            "Starting audio monitor — device=%s rate=%s chunk=%s publish_interval=%ss",
             Config.SOUND_DEVICE or "default (ALSA_CARD=%s)" % (Config.ALSA_CARD or "not set"),
             self.vad.sample_rate,
             Config.chunk_samples(),
+            Config.PUBLISH_INTERVAL,
         )
         self._running = True
         self._worker = threading.Thread(target=self._process_loop, daemon=True)
@@ -93,10 +93,8 @@ class AudioMonitor:
         """Open the stream, trying device name then ALSA hw fallback then default."""
         device = kwargs.pop("device", None)
         if device is None:
-            # No device specified — let PortAudio / ALSA pick via 'default'
             return sd.InputStream(**kwargs)
 
-        # Attempt 1: exact PortAudio device identifier (int or enumerated name)
         try:
             return sd.InputStream(**kwargs, device=device)
         except sd.PortAudioError as exc:
@@ -106,7 +104,6 @@ class AudioMonitor:
             else:
                 raise
 
-        # Attempt 2: resolve ALSA card name → hw:X,Y and try again
         hw_id = _resolve_alsa_hw(device)
         if hw_id:
             LOG.info("Resolved ALSA card '%s' → '%s', retrying", device, hw_id)
@@ -115,7 +112,6 @@ class AudioMonitor:
             except sd.PortAudioError as exc2:
                 LOG.warning("Failed to open ALSA hw '%s': %s", hw_id, exc2)
 
-        # Attempt 3: fallback to system default
         LOG.warning(
             "Failed to open device '%s'. Falling back to default.\n"
             "Available input devices:\n%s",
@@ -125,17 +121,21 @@ class AudioMonitor:
         return sd.InputStream(**kwargs)
 
     def _process_loop(self) -> None:
-        """Worker thread: drain audio queue and run VAD inference outside the callback."""
+        """Worker: sleep PUBLISH_INTERVAL, run one inference, publish. Nothing else."""
         while self._running:
-            try:
-                frame = self._queue.get(timeout=0.1)
-            except queue.Empty:
+            time.sleep(Config.PUBLISH_INTERVAL)
+            with self._frame_lock:
+                frame = self._latest_frame
+            if frame is None:
                 continue
-            prob = self.vad.get_probability(frame)
-            self.on_vad(prob)
-            db = rms_dbfs(frame)
-            if self._noise_throttler.should_publish(db):
-                self.on_noise(db)
+            try:
+                prob = self.vad.get_probability(frame)
+                self.on_vad(prob)
+                db = rms_dbfs(frame)
+                if self._noise_throttler.should_publish(db):
+                    self.on_noise(db)
+            except Exception as exc:
+                LOG.warning("VAD processing error: %s", exc)
 
     def _loop(self) -> None:
         def callback(indata, frames, time_info, status):
@@ -144,19 +144,10 @@ class AudioMonitor:
             if not self._running:
                 raise sd.CallbackStop
             frame = indata[:, 0].copy() if indata.ndim > 1 else indata.copy()
-            try:
-                self._queue.put_nowait(frame)
-            except queue.Full:
-                pass  # drop frame rather than blocking the real-time callback
+            with self._frame_lock:
+                self._latest_frame = frame
 
-        # SOUND_DEVICE is a PortAudio identifier (int or substring).
-        # ALSA_CARD is handled at the ALSA layer (affects the 'default' PCM);
-        # we do NOT pass it to PortAudio, because PortAudio cannot resolve
-        # ALSA card names — it only knows enumerated device names.
         device = Config.SOUND_DEVICE or None
-
-        # Chunk size must match the actual audio stream rate (the VAD plugin's
-        # sample_rate), not Config.SAMPLE_RATE which may differ.
         blocksize = int(self.vad.sample_rate * Config.CHUNK_DURATION_MS / 1000)
 
         kwargs = {

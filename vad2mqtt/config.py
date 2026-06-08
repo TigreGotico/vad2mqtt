@@ -37,11 +37,7 @@ class Config:
     DEVICE_NAME: str = os.getenv("DEVICE_NAME", "vad2mqtt")
     DEVICE_ID: str = os.getenv("DEVICE_ID", "vad2mqtt_01")
 
-    # VAD debounce (frame-based, chunk duration ~30 ms)
-    REQUIRED_SPEECH_FRAMES: int = int(os.getenv("REQUIRED_SPEECH_FRAMES", "5"))
-    REQUIRED_SILENCE_FRAMES: int = int(os.getenv("REQUIRED_SILENCE_FRAMES", "20"))
-
-    # Throttling
+    # Publish rate
     PUBLISH_INTERVAL: float = float(os.getenv("PUBLISH_INTERVAL", "1.0"))
     NOISE_LEVEL_INTERVAL: float = float(os.getenv("NOISE_LEVEL_INTERVAL", "2.0"))
     NOISE_LEVEL_DELTA: float = float(os.getenv("NOISE_LEVEL_DELTA", "3.0"))

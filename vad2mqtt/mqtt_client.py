@@ -27,11 +27,7 @@ class MQTTClient:
         self._prefix = Config.MQTT_TOPIC_PREFIX
         self._device_name = Config.DEVICE_NAME
         self._device_id = Config.DEVICE_ID
-        self._last_vad_publish = 0.0
-        self._last_vad_prob = 0.0
         self._last_speech_state = False
-        self._consecutive_speech = 0
-        self._consecutive_silence = 0
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -69,42 +65,9 @@ class MQTTClient:
         self.client.disconnect()
 
     def publish_vad(self, probability: float) -> None:
-        now = time.time()
-        raw_speech = probability >= Config.VAD_THRESHOLD
-
-        # Update consecutive-frame counters
-        if raw_speech:
-            self._consecutive_speech += 1
-            self._consecutive_silence = 0
-        else:
-            self._consecutive_silence += 1
-            self._consecutive_speech = 0
-
-        # Debounce: require N consecutive frames to flip the binary state
-        speech_confirmed = self._last_speech_state
-        if self._consecutive_speech >= Config.REQUIRED_SPEECH_FRAMES:
-            speech_confirmed = True
-        elif self._consecutive_silence >= Config.REQUIRED_SILENCE_FRAMES:
-            speech_confirmed = False
-
-        # Publish immediately on debounced state transitions so the binary
-        # sensor is responsive; otherwise throttle probability to PUBLISH_INTERVAL.
-        state_changed = speech_confirmed != self._last_speech_state
-        interval_elapsed = now - self._last_vad_publish >= Config.PUBLISH_INTERVAL
-
-        if not state_changed and not interval_elapsed:
-            self._last_vad_prob = probability
-            return
-
-        # Use the most recent probability
-        prob = probability if interval_elapsed else self._last_vad_prob
-        self._last_vad_publish = now
-        self._last_vad_prob = probability
-        self._last_speech_state = speech_confirmed
-
-        # Probability is published as 0-100 % so Home Assistant renders it as a
-        # gauge with a proper unit of measurement.
-        pct = round(prob * 100, 2)
+        speech = probability >= Config.VAD_THRESHOLD
+        self._last_speech_state = speech
+        pct = round(probability * 100, 2)
         self._publish(
             f"{self._prefix}/vad_probability",
             json.dumps({"probability": pct}),
@@ -113,7 +76,7 @@ class MQTTClient:
             f"{self._prefix}/state",
             json.dumps({
                 "probability": pct,
-                "speech": speech_confirmed,
+                "speech": speech,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }),
         )
