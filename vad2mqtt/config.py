@@ -38,7 +38,8 @@ class Config:
     DEVICE_ID: str = os.getenv("DEVICE_ID", "vad2mqtt_01")
 
     # Publish rate
-    PUBLISH_INTERVAL: float = float(os.getenv("PUBLISH_INTERVAL", "1.0"))
+    VAD_SAMPLE_INTERVAL: float = float(os.getenv("VAD_SAMPLE_INTERVAL", "0.25"))
+    PUBLISH_INTERVAL: float = float(os.getenv("PUBLISH_INTERVAL", "2.0"))
     NOISE_LEVEL_INTERVAL: float = float(os.getenv("NOISE_LEVEL_INTERVAL", "2.0"))
     NOISE_LEVEL_DELTA: float = float(os.getenv("NOISE_LEVEL_DELTA", "3.0"))
 

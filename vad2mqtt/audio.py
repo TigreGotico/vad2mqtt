@@ -6,6 +6,7 @@ import logging
 import subprocess
 import threading
 import time
+from collections import deque
 
 import numpy as np
 import sounddevice as sd
@@ -69,10 +70,11 @@ class AudioMonitor:
 
     def start(self) -> None:
         LOG.info(
-            "Starting audio monitor — device=%s rate=%s chunk=%s publish_interval=%ss",
+            "Starting audio monitor — device=%s rate=%s chunk=%s sample_interval=%ss publish_interval=%ss",
             Config.SOUND_DEVICE or "default (ALSA_CARD=%s)" % (Config.ALSA_CARD or "not set"),
             self.vad.sample_rate,
             Config.chunk_samples(),
+            Config.VAD_SAMPLE_INTERVAL,
             Config.PUBLISH_INTERVAL,
         )
         self._running = True
@@ -121,19 +123,31 @@ class AudioMonitor:
         return sd.InputStream(**kwargs)
 
     def _process_loop(self) -> None:
-        """Worker: sleep PUBLISH_INTERVAL, run one inference, publish. Nothing else."""
+        """Worker: sample inference every VAD_SAMPLE_INTERVAL, publish peak every PUBLISH_INTERVAL."""
+        probs: deque[float] = deque()
+        last_publish = 0.0
+
         while self._running:
-            time.sleep(Config.PUBLISH_INTERVAL)
+            time.sleep(Config.VAD_SAMPLE_INTERVAL)
+
             with self._frame_lock:
                 frame = self._latest_frame
             if frame is None:
                 continue
+
             try:
                 prob = self.vad.get_probability(frame)
-                self.on_vad(prob)
-                db = rms_dbfs(frame)
-                if self._noise_throttler.should_publish(db):
-                    self.on_noise(db)
+                probs.append(prob)
+
+                now = time.time()
+                if now - last_publish >= Config.PUBLISH_INTERVAL:
+                    last_publish = now
+                    peak = max(probs) if probs else 0.0
+                    probs.clear()
+                    self.on_vad(peak)
+                    db = rms_dbfs(frame)
+                    if self._noise_throttler.should_publish(db):
+                        self.on_noise(db)
             except Exception as exc:
                 LOG.warning("VAD processing error: %s", exc)
 
