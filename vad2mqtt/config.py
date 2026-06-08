@@ -10,7 +10,7 @@ class Config:
     SAMPLE_RATE: int = int(os.getenv("SAMPLE_RATE", "16000"))
     SOUND_DEVICE: str | None = os.getenv("SOUND_DEVICE") or None
     ALSA_CARD: str | None = os.getenv("ALSA_CARD") or None
-    CHUNK_DURATION_MS: int = int(os.getenv("CHUNK_DURATION_MS", "30"))
+    CHUNK_DURATION_MS: int = int(os.getenv("CHUNK_DURATION_MS", "64"))
 
     # VAD Plugin (ovos-plugin-manager)
     VAD_PLUGIN_MODULE: str = os.getenv("VAD_PLUGIN_MODULE", "ovos-vad-plugin-silero")

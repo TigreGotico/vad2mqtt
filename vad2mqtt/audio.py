@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 import subprocess
 import threading
 import time
@@ -59,6 +60,9 @@ class AudioMonitor:
         self.on_error = on_error
         self._running = False
         self._thread: threading.Thread | None = None
+        self._worker: threading.Thread | None = None
+        # Bounded queue — drops frames rather than blocking the audio callback.
+        self._queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=20)
         self._noise_throttler = Throttler(
             interval=Config.NOISE_LEVEL_INTERVAL,
             delta=Config.NOISE_LEVEL_DELTA,
@@ -72,6 +76,8 @@ class AudioMonitor:
             Config.chunk_samples(),
         )
         self._running = True
+        self._worker = threading.Thread(target=self._process_loop, daemon=True)
+        self._worker.start()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
@@ -80,6 +86,8 @@ class AudioMonitor:
         self._running = False
         if self._thread:
             self._thread.join(timeout=2.0)
+        if self._worker:
+            self._worker.join(timeout=2.0)
 
     def _open_stream(self, kwargs: dict):
         """Open the stream, trying device name then ALSA hw fallback then default."""
@@ -116,21 +124,30 @@ class AudioMonitor:
         )
         return sd.InputStream(**kwargs)
 
+    def _process_loop(self) -> None:
+        """Worker thread: drain audio queue and run VAD inference outside the callback."""
+        while self._running:
+            try:
+                frame = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            prob = self.vad.get_probability(frame)
+            self.on_vad(prob)
+            db = rms_dbfs(frame)
+            if self._noise_throttler.should_publish(db):
+                self.on_noise(db)
+
     def _loop(self) -> None:
         def callback(indata, frames, time_info, status):
             if status:
                 LOG.warning("Audio status: %s", status)
             if not self._running:
                 raise sd.CallbackStop
-            if indata.ndim == 1:
-                frame = indata.copy()
-            else:
-                frame = indata[:, 0].copy()
-            prob = self.vad.get_probability(frame)
-            self.on_vad(prob)
-            db = rms_dbfs(frame)
-            if self._noise_throttler.should_publish(db):
-                self.on_noise(db)
+            frame = indata[:, 0].copy() if indata.ndim > 1 else indata.copy()
+            try:
+                self._queue.put_nowait(frame)
+            except queue.Full:
+                pass  # drop frame rather than blocking the real-time callback
 
         # SOUND_DEVICE is a PortAudio identifier (int or substring).
         # ALSA_CARD is handled at the ALSA layer (affects the 'default' PCM);
