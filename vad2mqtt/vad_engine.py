@@ -6,6 +6,25 @@ import json
 import logging
 
 import numpy as np
+
+# Intercept onnxruntime before any plugin imports it so all sessions are
+# created with a 1-thread pool.  Without this, ORT allocates one thread per
+# CPU core and busy-waits between calls, burning the machine.
+try:
+    import onnxruntime as _ort
+
+    _orig_session = _ort.InferenceSession
+
+    def _single_threaded_session(model, *args, sess_options=None, **kwargs):
+        opts = _ort.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        return _orig_session(model, *args, sess_options=opts, **kwargs)
+
+    _ort.InferenceSession = _single_threaded_session
+except ImportError:
+    pass
+
 from ovos_plugin_manager.vad import OVOSVADFactory
 
 from .config import Config
