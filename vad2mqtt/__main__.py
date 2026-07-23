@@ -54,6 +54,15 @@ def main() -> None:
     try:
         while True:
             time.sleep(1.0)
+            if not monitor.is_healthy():
+                LOG.critical(
+                    "audio stream dead for >%ss, exiting so the container "
+                    "restart policy can recover",
+                    Config.WATCHDOG_TIMEOUT,
+                )
+                monitor.stop()
+                mqtt_client.disconnect()
+                sys.exit(1)
     except KeyboardInterrupt:
         _shutdown(signal.SIGINT, None)
 

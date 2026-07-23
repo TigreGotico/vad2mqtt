@@ -43,6 +43,9 @@ class Config:
     NOISE_LEVEL_INTERVAL: float = float(os.getenv("NOISE_LEVEL_INTERVAL", "2.0"))
     NOISE_LEVEL_DELTA: float = float(os.getenv("NOISE_LEVEL_DELTA", "3.0"))
 
+    # Watchdog
+    WATCHDOG_TIMEOUT: float = float(os.getenv("WATCHDOG_TIMEOUT", "30.0"))
+
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
