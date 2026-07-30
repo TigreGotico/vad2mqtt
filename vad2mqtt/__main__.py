@@ -30,16 +30,14 @@ def main() -> None:
     mqtt_client = MQTTClient()
     mqtt_client.connect()
 
-    # Publish model name once on startup
-    from .vad_engine import VADEngine
-    engine = VADEngine()
-    mqtt_client.publish_model(engine.model_name)
-
     monitor = AudioMonitor(
         on_vad=lambda prob: mqtt_client.publish_vad(prob),
         on_noise=lambda db: mqtt_client.publish_noise(db),
         on_error=lambda exc: LOG.error("Monitor error: %s", exc),
     )
+
+    # Publish model name once on startup
+    mqtt_client.publish_model(monitor.vad.model_name)
 
     def _shutdown(signum: int, frame: Any) -> None:
         LOG.info("Received signal %s, shutting down", signum)
@@ -51,7 +49,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
     monitor.start()
-    LOG.info("vad2mqtt running — listening via %s", engine.model_name)
+    LOG.info("vad2mqtt running — listening via %s", monitor.vad.model_name)
 
     try:
         while True:

@@ -27,6 +27,7 @@ class MQTTClient:
         self._prefix = Config.MQTT_TOPIC_PREFIX
         self._device_name = Config.DEVICE_NAME
         self._device_id = Config.DEVICE_ID
+        self._last_speech_state = False
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -43,25 +44,39 @@ class MQTTClient:
 
     def connect(self) -> None:
         LOG.info("Connecting to MQTT broker %s:%s", Config.MQTT_HOST, Config.MQTT_PORT)
-        self.client.connect(Config.MQTT_HOST, Config.MQTT_PORT, keepalive=60)
-        self.client.loop_start()
-        # Wait briefly for connection
-        for _ in range(20):
-            if self._connected:
-                break
-            time.sleep(0.1)
+        for attempt in range(1, Config.MQTT_RETRY_COUNT + 1):
+            try:
+                self.client.connect(Config.MQTT_HOST, Config.MQTT_PORT, keepalive=Config.MQTT_KEEPALIVE)
+                self.client.loop_start()
+                # Wait briefly for connection
+                deadline = time.time() + Config.MQTT_CONNECT_TIMEOUT
+                while time.time() < deadline:
+                    if self._connected:
+                        return
+                    time.sleep(0.1)
+                LOG.warning("MQTT connection timeout, retrying...")
+            except Exception as exc:
+                LOG.warning("MQTT connection attempt %s/%s failed: %s", attempt, Config.MQTT_RETRY_COUNT, exc)
+                time.sleep(min(2 ** attempt, Config.MQTT_RETRY_MAX_BACKOFF))
+        LOG.error("MQTT failed to connect after %s attempts, continuing anyway", Config.MQTT_RETRY_COUNT)
 
     def disconnect(self) -> None:
         self.client.loop_stop()
         self.client.disconnect()
 
     def publish_vad(self, probability: float) -> None:
-        self._publish(f"{self._prefix}/vad_probability", json.dumps({"probability": probability}))
+        speech = probability >= Config.VAD_THRESHOLD
+        self._last_speech_state = speech
+        pct = round(probability * 100, 2)
+        self._publish(
+            f"{self._prefix}/vad_probability",
+            json.dumps({"probability": pct}),
+        )
         self._publish(
             f"{self._prefix}/state",
             json.dumps({
-                "probability": round(probability, 4),
-                "speech": probability >= Config.VAD_THRESHOLD,
+                "probability": pct,
+                "speech": speech,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }),
         )
@@ -100,7 +115,7 @@ class MQTTClient:
             state_topic=f"{self._prefix}/vad_probability",
             value_template="{{ value_json.probability }}",
             device=device,
-            unit_of_measurement="",
+            unit_of_measurement="%",
             state_class="measurement",
             icon="mdi:account-voice",
         )

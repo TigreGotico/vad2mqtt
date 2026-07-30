@@ -5,33 +5,50 @@ services:
     image: ghcr.io/tigregotico/vad2mqtt:dev
     container_name: vad2mqtt
     restart: unless-stopped
+    # Pass host ALSA device for microphone access (works on pure ALSA hosts)
     devices:
       - /dev/snd:/dev/snd
     environment:
       # MQTT
-      - MQTT_HOST=your.mqtt.broker
-      - MQTT_PORT=1883
-      - MQTT_USER=
-      - MQTT_PASSWORD=
-      - MQTT_TOPIC_PREFIX=vad2mqtt
+      - MQTT_HOST=${MQTT_HOST:-localhost}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_USER=${MQTT_USER:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_TOPIC_PREFIX=${MQTT_TOPIC_PREFIX:-vad2mqtt}
+      - MQTT_QOS=${MQTT_QOS:-0}
+      - MQTT_RETAIN=${MQTT_RETAIN:-true}
+      - MQTT_KEEPALIVE=${MQTT_KEEPALIVE:-60}
+      - MQTT_RETRY_COUNT=${MQTT_RETRY_COUNT:-5}
+      - MQTT_RETRY_MAX_BACKOFF=${MQTT_RETRY_MAX_BACKOFF:-30}
+      - MQTT_CONNECT_TIMEOUT=${MQTT_CONNECT_TIMEOUT:-2.0}
       # Audio
-      - SAMPLE_RATE=16000
-      - SOUND_DEVICE=
-      - ALSA_CARD=
+      - SAMPLE_RATE=${SAMPLE_RATE:-16000}
+      - SOUND_DEVICE=${SOUND_DEVICE:-}
+      - ALSA_CARD=${ALSA_CARD:-}
+      - CHUNK_DURATION_MS=${CHUNK_DURATION_MS:-30}
       # VAD Plugin
-      - VAD_PLUGIN_MODULE=ovos-vad-plugin-silero
-      - VAD_PLUGIN_CONFIG=
-      - VAD_THRESHOLD=0.5
+      - VAD_PLUGIN_MODULE=${VAD_PLUGIN_MODULE:-ovos-vad-plugin-silero}
+      - VAD_PLUGIN_CONFIG=${VAD_PLUGIN_CONFIG:-}
+      - VAD_THRESHOLD=${VAD_THRESHOLD:-0.5}
+      - REQUIRED_SPEECH_FRAMES=${REQUIRED_SPEECH_FRAMES:-5}
+      - REQUIRED_SILENCE_FRAMES=${REQUIRED_SILENCE_FRAMES:-20}
       # Home Assistant
-      - HA_ENABLED=true
-      - HA_DISCOVERY_PREFIX=homeassistant
-      - DEVICE_NAME=vad2mqtt
-      - DEVICE_ID=vad2mqtt_01
+      - HA_ENABLED=${HA_ENABLED:-true}
+      - HA_DISCOVERY_PREFIX=${HA_DISCOVERY_PREFIX:-homeassistant}
+      - DEVICE_NAME=${DEVICE_NAME:-vad2mqtt}
+      - DEVICE_ID=${DEVICE_ID:-vad2mqtt_01}
       # Throttling
-      - PUBLISH_INTERVAL=0.5
-      - NOISE_LEVEL_INTERVAL=2.0
-      - NOISE_LEVEL_DELTA=3.0
+      - PUBLISH_INTERVAL=${PUBLISH_INTERVAL:-1.0}
+      - NOISE_LEVEL_INTERVAL=${NOISE_LEVEL_INTERVAL:-2.0}
+      - NOISE_LEVEL_DELTA=${NOISE_LEVEL_DELTA:-3.0}
       # Logging
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    # If your host uses PipeWire (most modern desktops), comment out 'devices'
+    # above and uncomment the lines below (adjust UID if needed):
+    # volumes:
+    #   - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0
+    #   - /run/user/1000/pulse:/run/user/1000/pulse
+    # environment:
+    #   - XDG_RUNTIME_DIR=/run/user/1000
     # Optional: use host network for MQTT if broker is local
     # network_mode: host

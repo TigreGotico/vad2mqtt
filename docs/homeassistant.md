@@ -1,55 +1,56 @@
 # Home Assistant integration
 
-`vad2mqtt` publishes four entities via MQTT auto-discovery. No manual YAML
-configuration is required.
+`vad2mqtt` publishes 4 entities through MQTT auto-discovery. No manual YAML
+configuration is needed.
 
-## Occupancy detection — a complementary signal
+## Occupancy detection
 
-If a device already has a microphone (smart speaker, SBC with a cheap USB mic,
-intercom panel, etc.), VAD is a cheap *complementary* occupancy signal:
+If a device already has a microphone (smart speaker, single-board computer
+with a USB mic, intercom panel), VAD gives a complementary occupancy signal:
 
-- **No extra hardware** — the mic is already there.
-- **Privacy-first** — no audio leaves the device; only a 0–1 probability float
-  and a dB value are sent over MQTT.
-- **Lightweight** — Silero VAD runs in ~1 ms per 30 ms frame on a Raspberry Pi.
-- **Cloud-free** — 100 % local. No voice recognition, no transcription, no
-  wake-word engine.
+- No extra hardware. The mic is already there.
+- No audio leaves the device. Only a 0-100% probability value and a dB value
+  go over MQTT.
+- Silero VAD runs in about 1 ms per 30 ms frame on a Raspberry Pi.
+- The detector works fully local. There is no voice recognition, no
+  transcription, and no wake-word engine.
 
-When someone speaks, `Speech Detected` flips to **ON**. When the room is silent
-for a configurable duration, it flips to **OFF**. Used *alone*, this misses
-people who are sitting quietly. Used *alongside* PIR, mmWave, door sensors,
-etc., it dramatically reduces false negatives.
+When someone speaks, `Speech Detected` flips to **ON**. When the room stays
+silent for a configurable duration, it flips to **OFF**. Used alone, this
+signal misses people who sit quietly. Used with PIR, mmWave, or door sensors,
+it reduces false negatives.
 
 ### Integration with Area Occupancy Detection
 
-The [Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection)
-integration fuses multiple sensors into a single probabilistic occupancy score.
-It is configured entirely through the Home Assistant UI (no YAML).
+The
+[Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection)
+integration fuses multiple sensors into one probabilistic occupancy score.
+Configure it through the Home Assistant UI. It needs no YAML.
 
-Add `vad2mqtt` inputs via the integration's config flow:
+Add `vad2mqtt` inputs through the integration's config flow:
 
-1. **Binary sensor** — `binary_sensor.vad2mqtt_speech_detected`
-   - Treat this as a *strong* indicator: high weight, high `probability_on`
-     (someone is almost certainly present when speaking), low `probability_off`
-     (silence does not mean absence).
-2. **Noise level sensor** — `sensor.vad2mqtt_noise_level`
-   - Treat this as a *weaker* continuous signal: lower weight, threshold around
-     `-40` dB. Contributes even when no one is actively speaking (typing, chair
-     squeaking, coffee grinder).
+1. `binary_sensor.vad2mqtt_speech_detected`: treat this as a strong
+   indicator: set a high weight and a high `probability_on` (someone is
+   almost certainly present when speaking), and a low `probability_off`
+   (silence does not mean absence).
+2. `sensor.vad2mqtt_noise_level`: treat this as a weaker continuous signal:
+   set a lower weight and a threshold around `-40` dB. It contributes even
+   when no one speaks (typing, a chair squeaking, a coffee grinder).
 
-Pair these with your existing PIR, mmWave, door, or power-monitoring sensors.
-The integration Bayesian-fuses everything into one `occupancy` probability.
+Pair these with existing PIR, mmWave, door, or power-monitoring sensors. The
+integration fuses everything into one `occupancy` probability using a
+Bayesian model.
 
 ## Entities
 
 | Entity | Type | Purpose |
 |--------|------|---------|
-| VAD Probability | sensor | Raw 0.0–1.0 speech probability |
+| VAD Probability | sensor | Raw 0-100% speech probability |
 | VAD Model | sensor | Which OPM plugin is running |
 | Noise Level | sensor | Ambient RMS in dB |
-| Speech Detected | binary_sensor | Occupancy proxy — ON when someone speaks |
+| Speech Detected | binary_sensor | Occupancy proxy: ON when someone speaks |
 
-## Automation example — room occupancy
+## Automation example: room occupancy
 
 ```yaml
 alias: "Office occupied"
@@ -75,21 +76,22 @@ action:
       entity_id: input_boolean.office_occupied
 ```
 
-## Dashboard card — speech probability gauge
+## Dashboard card: speech probability gauge
 
 ```yaml
 type: gauge
 entity: sensor.vad2mqtt_vad_probability
 name: Speech Probability
 min: 0
-max: 1
+max: 100
+unit: "%"
 severity:
-  green: 0.0
-  yellow: 0.3
-  red: 0.7
+  green: 0
+  yellow: 30
+  red: 70
 ```
 
-## Dashboard card — noise level history
+## Dashboard card: noise level history
 
 ```yaml
 type: history-graph
@@ -100,11 +102,14 @@ hours_to_show: 24
 
 ## Device placement tips
 
-- **Point the mic at the room**, not at a speaker. If the VAD picks up TV audio,
+- Point the mic at the room, not at a speaker. If the VAD picks up TV audio,
   raise `VAD_THRESHOLD` or move the mic.
-- **Small rooms** — a cheap USB mic on a Raspberry Pi works perfectly.
-- **Noisy environments** (kitchen, workshop) — use `NOISE_LEVEL_DELTA` to ignore
-  steady-state hum; VAD is triggered by *changes* in the audio spectrum, not
-  absolute volume.
-- **Privacy mode** — if you ever want to mute the sensor, stop the container.
-  No audio is ever stored or streamed.
+- In small rooms, a cheap USB mic on a Raspberry Pi works well.
+- In noisy environments (kitchen, workshop), use `NOISE_LEVEL_DELTA` to
+  ignore steady-state hum. VAD triggers on changes in the audio spectrum, not
+  on absolute volume.
+- To mute the sensor, stop the container. No audio is ever stored or
+  streamed.
+
+---
+[Home](../README.md)
