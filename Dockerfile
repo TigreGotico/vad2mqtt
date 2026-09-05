@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Install ALSA / audio libraries
 # pipewire-alsa enables ALSA apps to talk to a host PipeWire server
