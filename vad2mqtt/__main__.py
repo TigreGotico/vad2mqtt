@@ -15,6 +15,24 @@ from .version import __version__
 
 LOG = logging.getLogger("vad2mqtt")
 
+RSS_LOG_INTERVAL = 3600.0  # seconds
+
+
+def _log_rss() -> None:
+    """Log the process' resident set size, read from /proc/self/status.
+
+    Dependency-free timestamp of memory usage — useful for pinpointing when
+    a leak starts growing without needing psutil or similar.
+    """
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    LOG.info("memory usage: %s", line.split(":", 1)[1].strip())
+                    return
+    except OSError as exc:
+        LOG.debug("could not read /proc/self/status: %s", exc)
+
 
 def setup_logging() -> None:
     logging.basicConfig(
@@ -51,9 +69,22 @@ def main() -> None:
     monitor.start()
     LOG.info("vad2mqtt running — listening via %s", monitor.vad.model_name)
 
+    last_rss_log = time.monotonic()
     try:
         while True:
             time.sleep(1.0)
+            if time.monotonic() - last_rss_log >= RSS_LOG_INTERVAL:
+                last_rss_log = time.monotonic()
+                _log_rss()
+            if not monitor.is_healthy():
+                LOG.critical(
+                    "audio stream dead for >%ss, exiting so the container "
+                    "restart policy can recover",
+                    Config.WATCHDOG_TIMEOUT,
+                )
+                monitor.stop()
+                mqtt_client.disconnect()
+                sys.exit(1)
     except KeyboardInterrupt:
         _shutdown(signal.SIGINT, None)
 

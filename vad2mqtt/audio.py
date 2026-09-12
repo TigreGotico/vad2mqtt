@@ -60,9 +60,13 @@ class AudioMonitor:
         self._running = False
         self._thread: threading.Thread | None = None
         self._worker: threading.Thread | None = None
-        # Shared latest frame — audio callback writes, worker reads.
+        # Shared latest frame — audio callback writes, worker consumes.
         self._latest_frame: np.ndarray | None = None
         self._frame_lock = threading.Lock()
+        # Watchdog: last time a frame arrived from the audio callback, and
+        # when the monitor was started (for the startup grace period).
+        self._last_frame_ts: float | None = None
+        self._started_ts: float | None = None
         self._noise_throttler = Throttler(
             interval=Config.NOISE_LEVEL_INTERVAL,
             delta=Config.NOISE_LEVEL_DELTA,
@@ -78,6 +82,7 @@ class AudioMonitor:
             Config.PUBLISH_INTERVAL,
         )
         self._running = True
+        self._started_ts = time.monotonic()
         self._worker = threading.Thread(target=self._process_loop, daemon=True)
         self._worker.start()
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -90,6 +95,18 @@ class AudioMonitor:
             self._thread.join(timeout=2.0)
         if self._worker:
             self._worker.join(timeout=2.0)
+
+    def is_healthy(self) -> bool:
+        """True if the audio callback is still delivering frames.
+
+        Before the first frame arrives, allow a startup grace period of
+        ``Config.WATCHDOG_TIMEOUT`` seconds since :meth:`start`.
+        """
+        now = time.monotonic()
+        if self._last_frame_ts is None:
+            started = self._started_ts or now
+            return now - started < Config.WATCHDOG_TIMEOUT
+        return now - self._last_frame_ts < Config.WATCHDOG_TIMEOUT
 
     def _open_stream(self, kwargs: dict):
         """Open the stream, trying device name then ALSA hw fallback then default."""
@@ -132,6 +149,7 @@ class AudioMonitor:
 
             with self._frame_lock:
                 frame = self._latest_frame
+                self._latest_frame = None
             if frame is None:
                 continue
 
@@ -160,6 +178,7 @@ class AudioMonitor:
             frame = indata[:, 0].copy() if indata.ndim > 1 else indata.copy()
             with self._frame_lock:
                 self._latest_frame = frame
+            self._last_frame_ts = time.monotonic()
 
         device = Config.SOUND_DEVICE or None
         blocksize = int(self.vad.sample_rate * Config.CHUNK_DURATION_MS / 1000)

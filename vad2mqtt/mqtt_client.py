@@ -6,8 +6,7 @@ import json
 import logging
 import time
 
-import paho.mqtt.client as mqtt
-
+from ._mqtt import new_client
 from .config import Config
 from .version import __version__
 
@@ -18,7 +17,7 @@ class MQTTClient:
     """Publishes VAD metrics to MQTT and optionally registers HA discovery."""
 
     def __init__(self) -> None:
-        self.client = mqtt.Client(client_id=Config.MQTT_CLIENT_ID)
+        self.client = new_client(Config.MQTT_CLIENT_ID)
         if Config.MQTT_USER and Config.MQTT_PASSWORD:
             self.client.username_pw_set(Config.MQTT_USER, Config.MQTT_PASSWORD)
         self.client.on_connect = self._on_connect
@@ -29,17 +28,18 @@ class MQTTClient:
         self._device_id = Config.DEVICE_ID
         self._last_speech_state = False
 
-    def _on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
+    def _on_connect(self, client, userdata, flags, reason_code, *args):
+        # reason_code is an int (paho 1.x) or ReasonCode (2.x); both == 0 on success.
+        if reason_code == 0:
             LOG.info("MQTT connected to %s:%s", Config.MQTT_HOST, Config.MQTT_PORT)
             self._connected = True
             if Config.HA_ENABLED:
                 self._publish_discovery()
         else:
-            LOG.warning("MQTT connection failed, rc=%s", rc)
+            LOG.warning("MQTT connection failed, reason=%s", reason_code)
 
-    def _on_disconnect(self, client, userdata, rc):
-        LOG.warning("MQTT disconnected, rc=%s", rc)
+    def _on_disconnect(self, client, userdata, *args):
+        LOG.warning("MQTT disconnected; will auto-reconnect")
         self._connected = False
 
     def connect(self) -> None:
