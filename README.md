@@ -114,6 +114,8 @@ changes. Tune only what you need.
 | `PUBLISH_INTERVAL` | `1.0` | Minimum seconds between VAD publishes |
 | `NOISE_LEVEL_INTERVAL` | `2.0` | Minimum seconds between noise publishes |
 | `NOISE_LEVEL_DELTA` | `3.0` | dB jump that bypasses the noise interval |
+| **Watchdog** | | |
+| `WATCHDOG_TIMEOUT` | `30.0` | Seconds without a captured audio frame before exiting so the container restart policy can recover |
 | **Logging** | | |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 

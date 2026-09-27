@@ -50,9 +50,11 @@ class VADEngine:
                 return float(result)
             except Exception:
                 pass
-        # Fallback: is_silence boolean → 0.0 / 1.0
+        # Fallback: is_silence boolean → 0.0 / 1.0. The OPM plugin signature is
+        # is_silence(chunk) — one positional arg, int16 PCM bytes.
         try:
-            is_silence = self._engine.is_silence(frame, self.sample_rate)
+            chunk = self._to_pcm16(frame)
+            is_silence = self._engine.is_silence(chunk)
             return 0.0 if is_silence else 1.0
         except Exception as exc:
             LOG.debug("is_silence fallback failed: %s", exc)
@@ -61,9 +63,15 @@ class VADEngine:
     def is_speech(self, frame: np.ndarray) -> bool:
         """Return True if frame contains speech (uses plugin threshold)."""
         try:
-            return not self._engine.is_silence(frame, self.sample_rate)
+            chunk = self._to_pcm16(frame)
+            return not self._engine.is_silence(chunk)
         except Exception:
             return self.get_probability(frame) >= Config.VAD_THRESHOLD
+
+    @staticmethod
+    def _to_pcm16(frame: np.ndarray) -> bytes:
+        """Convert a float32 [-1, 1] frame to int16 PCM bytes."""
+        return (np.clip(frame, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
 
     def reset(self) -> None:
         """Reset internal VAD state."""
